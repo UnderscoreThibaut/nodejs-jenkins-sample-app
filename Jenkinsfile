@@ -21,7 +21,7 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                withSonarQubeEnv('My SonarQube') {
+                withSonarQubeEnv('SonarQube') {
                     // Example for Maven; replace with your build tool
                     sh '''
                         mvn clean verify sonar:sonar \
