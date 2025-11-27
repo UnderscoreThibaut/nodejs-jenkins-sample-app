@@ -79,19 +79,17 @@ pipeline {
 
         stage('Delete Old Images For This Branch') {
             steps {
-                // Keep the latest tag for the branch, delete older branch images
                 sh """
                     echo "Cleaning old images for branch ${BRANCH_NAME}..."
                     docker images ${IMAGE_NAME} --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-                      | grep '${IMAGE_NAME}:${BRANCH_NAME}-' \
+                      | grep "${IMAGE_NAME}:${BRANCH_NAME}-" \
                       | sort \
                       | head -n -1 \
-                      | awk '{print $2}' \
+                      | awk '{print \$2}' \
                       | xargs -r docker rmi || true
                 """
             }
         }
-    }
 
     post {
         failure {
