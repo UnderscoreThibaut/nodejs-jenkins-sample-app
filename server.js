@@ -4,7 +4,7 @@ const PORT = 3000;
 
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Hello from Jenkins CI/CD!',
+    message: 'Ma super CI/CD!',
     build: process.env.BUILD_NUMBER || 'local',
     timestamp: new Date().toISOString()
   });
