@@ -2,12 +2,13 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME     = 'nodejs-app'                  // TODO: your image name
-        CONTAINER_BASE = 'nodejs-app'                  // base name; we append branch
+        APP_NAME       = 'nodejs-app'
+        IMAGE_NAME     = 'nodejs-app'          // Docker image name
+        CONTAINER_BASE = 'nodejs-app'          // Base container name (branch is appended)
     }
 
     options {
-        disableConcurrentBuilds()
+        disableConcurrentBuilds()              // No concurrent build per branch
         timestamps()
     }
 
@@ -19,14 +20,33 @@ pipeline {
             }
         }
 
+        stage('Install & Test') {
+            steps {
+                sh '''
+                    # Install dependencies
+                    if [ -f package-lock.json ]; then
+                      npm ci
+                    else
+                      npm install
+                    fi
+
+                    # Run tests (adjust if you use another test script)
+                    npm test
+                '''
+            }
+        }
+
         stage('SonarQube Scan') {
             steps {
+                // "SonarQube" must match the server name configured in Jenkins
                 withSonarQubeEnv('SonarQube') {
-                    // Example for Maven; replace with your build tool
-                    sh '''
-                        mvn clean verify sonar:sonar \
-                          -Dsonar.projectKey=${BRANCH_NAME}
-                    '''
+                    sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=${APP_NAME}-${BRANCH_NAME} \
+                          -Dsonar.projectName=${APP_NAME}-${BRANCH_NAME} \
+                          -Dsonar.sources=. \
+                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                    """
                 }
             }
         }
@@ -40,6 +60,7 @@ pipeline {
                 }
 
                 sh """
+                    echo "Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}"
                     docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     docker tag  ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:${LATEST_TAG}
                 """
@@ -50,7 +71,7 @@ pipeline {
             steps {
                 sh """
                     if docker ps -a --format '{{.Names}}' | grep -w ${CONTAINER_NAME} >/dev/null 2>&1; then
-                      echo "Stopping old container ${CONTAINER_NAME}..."
+                      echo "Stopping and removing old container ${CONTAINER_NAME}..."
                       docker rm -f ${CONTAINER_NAME} || true
                     else
                       echo "No existing container named ${CONTAINER_NAME}"
@@ -62,14 +83,14 @@ pipeline {
         stage('Run New Container') {
             steps {
                 script {
-                    // Different ports per branch
-                    def portMapping = (BRANCH_NAME == 'main')
-                        ? '8080:80'      // TODO adjust if needed
-                        : '8081:80'      // develop branch port
-                        
+                    // Different host ports for branches so they can run in parallel
+                    // Assumes your Node app listens on container port 3000
+                    def hostPort = (BRANCH_NAME == 'main') ? '3000' : '3001'
+
                     sh """
+                        echo "Starting new container ${CONTAINER_NAME} on host port ${hostPort}..."
                         docker run -d --name ${CONTAINER_NAME} \
-                          -p ${portMapping} \
+                          -p ${hostPort}:3000 \
                           ${IMAGE_NAME}:${LATEST_TAG}
                     """
                 }
@@ -92,8 +113,11 @@ pipeline {
     }
 
     post {
+        success {
+            echo "Build & deploy successful for branch ${BRANCH_NAME}"
+        }
         failure {
-            echo "Build failed on branch ${BRANCH_NAME}"
+            echo "Build FAILED for branch ${BRANCH_NAME}"
         }
     }
 }
