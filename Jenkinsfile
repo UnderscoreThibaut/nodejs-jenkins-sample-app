@@ -7,11 +7,12 @@ pipeline {
     }
 
     options {
-        disableConcurrentBuilds()  // avoid race per branch
+        disableConcurrentBuilds()
         timestamps()
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -20,14 +21,12 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                // "My SonarQube" must match the name configured in Jenkins
                 withSonarQubeEnv('My SonarQube') {
-                    // Example for Maven project; replace with your command
-                    sh """
+                    // Example for Maven; replace with your build tool
+                    sh '''
                         mvn clean verify sonar:sonar \
                           -Dsonar.projectKey=${BRANCH_NAME}
-                    """
-                    // Or: sonar-scanner ...
+                    '''
                 }
             }
         }
@@ -35,8 +34,8 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    env.IMAGE_TAG     = "${BRANCH_NAME}-${env.BUILD_NUMBER}"
-                    env.LATEST_TAG    = "${BRANCH_NAME}-latest"
+                    env.IMAGE_TAG      = "${BRANCH_NAME}-${env.BUILD_NUMBER}"
+                    env.LATEST_TAG     = "${BRANCH_NAME}-latest"
                     env.CONTAINER_NAME = "${CONTAINER_BASE}-${BRANCH_NAME}"
                 }
 
@@ -63,11 +62,11 @@ pipeline {
         stage('Run New Container') {
             steps {
                 script {
-                    // Different ports for main vs develop so they can run together
+                    // Different ports per branch
                     def portMapping = (BRANCH_NAME == 'main')
-                        ? '8080:80'        // TODO: host:container for main
-                        : '8081:80'        // TODO: host:container for develop (or other branches)
-
+                        ? '8080:80'      // TODO adjust if needed
+                        : '8081:80'      // develop branch port
+                        
                     sh """
                         docker run -d --name ${CONTAINER_NAME} \
                           -p ${portMapping} \
@@ -90,10 +89,11 @@ pipeline {
                 """
             }
         }
+    }
 
     post {
         failure {
-            echo "Build failed for branch ${BRANCH_NAME}"
+            echo "Build failed on branch ${BRANCH_NAME}"
         }
     }
 }
